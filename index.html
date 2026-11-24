@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Split Gate Lab · Chemical Potential Simulator</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="stack-styles.css">
+  <script src="baseline.js" defer></script>
+  <script src="profile-data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">∿</span><div><h1>Split Gate Lab</h1><p>2D semiconductor · Self-consistent electrostatics</p></div></div>
+    <div class="top-actions"><span class="local-tag">Local app · Offline computation</span><button id="theme" class="icon-button" type="button" aria-label="Toggle color theme">Dark mode</button></div>
+  </header>
+  <div class="layout">
+    <aside class="sidebar">
+      <form id="params">
+        <div class="section-heading"><h2>Device parameters</h2><button type="button" id="reset" class="text-button">Defaults</button></div>
+        <p class="muted small">Equal gate bias; semi-infinite gates at x &lt; −L/2 and x &gt; L/2. Uniform along y.</p>
+        <div class="fields">
+          <label class="span-two">Gate separation L <span>nm</span><input name="L" type="number" value="2000" min="100" max="10000" step="any" required></label>
+          <label>hBN thickness D <span>nm</span><input name="D" type="number" value="40" min="5" max="300" step="any" required></label>
+          <label>Metal thickness d <span>nm</span><input name="d" type="number" value="40" min="5" max="300" step="any" required></label>
+          <label class="span-two">Common bias Vg − VFB <span>V</span><input name="Vg" type="number" value="10" step="any" required></label>
+          <label class="span-two">Backgate boundary<select name="back"><option value="true">SiO₂ / grounded Si backgate</option><option value="false">SiO₂ half-space / no backgate</option></select></label>
+          <label class="span-two">Gap filling below hBN<select name="gap"><option value="0">Air: flat hBN bridging the gates</option><option value="1">hBN filling</option><option value="2">SiO₂: embedded metal gates</option></select></label>
+        </div>
+        <details class="settings" open>
+          <summary>Material and boundaries</summary>
+          <div class="fields">
+            <label>SiO₂ thickness H <span>nm</span><input name="H" type="number" value="285" min="20" max="3000" step="any" required></label>
+            <label>Top hBN cap <span>nm</span><input name="cap" type="number" value="0" min="0" max="300" step="any" required></label>
+            <label>Temperature T <span>K</span><input name="T" type="number" value="4" min="1" max="400" step="any" required></label>
+            <label>Quasiparticle gap Eg <span>eV</span><input name="Eg" type="number" value="2" min="0.5" max="3" step="any" required></label>
+            <label class="span-two">Zero-bias μ₀ relative to midgap <span>eV</span><input name="mu0" type="number" value="0" min="-1.7" max="1.7" step="any" required></label>
+          </div>
+        </details>
+        <details class="settings">
+          <summary>Numerical accuracy</summary>
+          <div class="fields">
+            <label>Mesh<select name="quality"><option value="0.65">Fast</option><option value="1" selected>Standard</option><option value="1.5">Fine</option></select></label>
+            <label>Domain extension factor<select name="box"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+          </div>
+        </details>
+        <div class="run-actions"><button type="submit" id="calculate" class="primary">Calculate profile</button><button type="button" id="cancel" hidden>Cancel</button></div>
+        <div id="status" class="status" role="status" aria-live="polite">Loaded the default semi-infinite-gate solution</div>
+        <div class="file-actions"><button type="button" id="save-params">Save parameters</button><button type="button" id="load-params">Load parameters</button><input type="file" id="param-file" accept=".json,application/json" hidden></div>
+      </form>
+      <details class="model-notes">
+        <summary>Geometry and energy definitions</summary>
+        <p>The equilibrium electrochemical potential EF is uniform. The plotted μ(x) = EF − Emid(x) is measured relative to the local midgap; EF − EC = μ − Eg/2.</p>
+        <p>The gates occupy x &lt; −L/2 and x &gt; L/2, with −d ≤ z ≤ 0. There is no outer gate edge or physical gate-width parameter. The structure is translationally invariant along y.</p>
+        <p>Self-consistent 2D Poisson–Thomas–Fermi model with sheet charge and quantum capacitance. hBN: εx = 6.9, εz = 3.4; SiO₂: ε = 3.9; air: ε = 1. Representative monolayer WSe₂ band parameters.</p>
+        <p>D is measured from the metal top to the sheet; H from the metal bottom to Si. The sheet and hBN are flat. Metal continues to the outer numerical boundary, with zero normal flux there to approximate the far field. The extension factor controls numerical truncation, not gate width.</p>
+        <p>Nonzero μ₀ defines a uniformly doped, compensated reference state. Applied voltage has no fixed input ceiling; convergence and the assumptions of this electrostatic band model still apply. See <a href="README.txt" target="_blank" rel="noopener">model notes</a>.</p>
+      </details>
+    </aside>
+    <main>
+      <div id="dirty" class="notice" hidden>Parameters changed. The plots still show the last completed result; select Calculate profile to update.</div>
+      <section class="metrics" aria-label="Results at the gap center">
+        <div class="metric"><span>Center chemical potential μ(0)</span><strong id="metric-mu">—</strong><small>Relative to the local midgap</small></div>
+        <div class="metric"><span>Center EF − EC</span><strong id="metric-eta">—</strong><small>Negative means below the conduction band</small></div>
+        <div class="metric"><span>Center free carriers n + p</span><strong id="metric-n">—</strong><small id="metric-ratio">—</small></div>
+      </section>
+      <section class="panel geometry-panel">
+        <div class="panel-heading"><h2>Device cross-section</h2><span class="muted small">Vertical scale exaggerated; gates extend to ±∞</span></div>
+        <svg id="geometry" role="img" aria-label="Cross-section of WSe2, hBN, semi-infinite split gates and substrate"></svg>
+        <div id="result-params" class="muted small"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading"><div><h2>Lateral profile</h2><p class="muted small">The shaded area marks the physical gap between the gates</p></div><button id="export-profile" type="button">Export profile CSV</button></div>
+        <div class="stack-controls">
+          <label>Overlay gate voltages <span>V</span><input id="stack-voltages" type="text" value="0, 10, 20, 50" placeholder="e.g. 0, 10, 20, 50" aria-describedby="stack-help"></label>
+          <button id="stack-run" type="button" class="secondary">Compute stack</button>
+        </div>
+        <p id="stack-help" class="muted small">Comma-separated Vg values. Geometry and materials are fixed to the current form. A voltage sweep also saves its full profiles for overlay.</p>
+        <div class="plot-controls"><div class="segmented" role="group" aria-label="Profile display"><button id="profile-single" type="button" data-profile-view="single" aria-pressed="true">Single bias</button><button id="profile-stack" type="button" data-profile-view="stack" aria-pressed="false" disabled>Stacked biases</button></div></div>
+        <div class="plot-controls"><div class="segmented" role="group" aria-label="Profile quantity"><button type="button" data-profile="mu" aria-pressed="true">Chemical potential μ</button><button type="button" data-profile="eta" aria-pressed="false">EF − EC</button><button type="button" data-profile="density" aria-pressed="false">Carrier density</button></div><button id="export-profile-png" class="text-button" type="button">Save plot</button></div>
+        <canvas id="profile-chart" class="chart" role="img" aria-label="Chemical potential or carrier density versus lateral position"></canvas>
+        <div id="profile-readout" class="plot-readout" aria-live="off">Move the pointer to inspect local values</div>
+        <div id="convergence" class="muted small"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading"><div><h2>Gap center versus gate bias</h2><p class="muted small">Other device parameters are fixed; each point is a self-consistent solution.</p></div><button id="export-sweep" type="button">Export sweep CSV</button></div>
+        <div class="sweep-controls"><label>Start Vg <span>V</span><input id="sweep-min" type="number" value="0" step="any"></label><label>End Vg <span>V</span><input id="sweep-max" type="number" value="20" step="any"></label><label>Points<input id="sweep-count" type="number" value="11" min="3" max="41" step="1"></label><button id="scan" type="button" class="secondary">Run sweep</button></div>
+        <div class="plot-controls"><div class="segmented" role="group" aria-label="Sweep quantity"><button type="button" data-sweep="mu" aria-pressed="true">Center μ</button><button type="button" data-sweep="density" aria-pressed="false">Center n + p</button></div><button id="export-sweep-png" class="text-button" type="button">Save plot</button></div>
+        <canvas id="sweep-chart" class="chart" role="img" aria-label="Center chemical potential or carrier density versus gate voltage"></canvas>
+        <div id="sweep-readout" class="plot-readout" aria-live="off">—</div>
+      </section>
+      <footer>Local Poisson–Thomas–Fermi model · Source and examples are in the app folder · <a href="README.txt" target="_blank" rel="noopener">Documentation</a></footer>
+    </main>
+  </div>
+</body>
+</html>

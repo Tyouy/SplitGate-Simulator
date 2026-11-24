@@ -1,0 +1,28 @@
+// Checks real worker entry points without requiring a browser or npm packages.
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const solver=require('./solver.js');const messages=[];
+const context={importScripts(){},SplitGate:solver,performance,self:{postMessage:m=>messages.push(m)}};
+vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/solver-worker.js','utf8'),context);
+context.self.onmessage({data:{id:1,type:'profile',params:{quality:.65}}});
+const a=messages.at(-1);assert.equal(a.type,'result');assert.ok(a.result.center.mu>.25&&a.result.center.mu<.28);assert.ok(a.result.residual<1e-7);assert.equal(a.result.params.geometry,'semi-infinite');assert.ok(!('W' in a.result.params));
+messages.length=0;
+context.self.onmessage({data:{id:2,type:'sweep',params:{quality:.65,Vg:10},scan:{min:0,max:10,count:3}}});
+const b=messages.at(-1);assert.equal(b.type,'result');assert.equal(b.sweep.data.length,3);assert.equal(b.sweep.data[0].center.mu,0);assert.ok(b.sweep.data[2].center.mu>b.sweep.data[1].center.mu);assert.equal(b.result.params.Vg,10);
+messages.length=0;
+context.self.onmessage({data:{id:3,type:'sweep',params:{quality:.65,Vg:6},scan:{min:0,max:10,count:3}}});
+const c=messages.at(-1);assert.equal(c.type,'result');assert.equal(c.result.params.Vg,6);assert.ok(messages.some(m=>m.finishing));
+console.log('PASS: profile job, voltage sweep, progress messages, current-bias result outside sweep points.');
+messages.length=0;
+context.self.onmessage({data:{id:4,type:'sweep',params:{quality:.65,Vg:50},scan:{min:40,max:60,count:3}}});
+const d=messages.at(-1);assert.equal(d.type,'result');assert.equal(d.result.params.Vg,50);assert.equal(d.sweep.data[2].Vg,60);assert.ok(d.sweep.data[2].center.mu>d.sweep.data[0].center.mu);
+console.log('PASS: voltage sweep above the former 30 V limit.');
+assert.equal(d.stack.profiles.length,3);assert.equal(d.stack.profiles[2].params.Vg,60);
+assert.equal(d.stack.profiles[0].center.mu,d.sweep.data[0].center.mu);
+messages.length=0;
+context.self.onmessage({data:{id:5,type:'stack',params:{quality:.65,Vg:6},voltages:[50,0,10,10]}});
+const overlay=messages.at(-1);assert.equal(overlay.type,'result');assert.equal(overlay.jobType,'stack');
+assert.deepEqual(Array.from(overlay.stack.profiles,r=>r.params.Vg),[0,10,50]);
+assert.equal(overlay.result.params.Vg,6);assert.ok(!overlay.sweep);assert.ok(messages.some(m=>m.finishing));
+assert.ok(overlay.stack.profiles[2].center.mu>overlay.stack.profiles[1].center.mu);
+assert.ok(overlay.stack.profiles.every(r=>r.profile.length===overlay.stack.profiles[0].profile.length));
+console.log('PASS: custom stacked profiles, duplicate removal, full sweep profiles, unchanged current-bias metrics.');

@@ -1,0 +1,8 @@
+{
+  "independent_direct_newton_iterations": 19,
+  "maximum_phi_difference_V": 1.3632428519372297e-11,
+  "parallel_plate_mu_eV": 1.0252303561962666,
+  "parallel_plate_density_cm2": 4215805561877.618,
+  "far_gate_mu_eV": 1.0252295553753432,
+  "geometry": "semi-infinite"
+}

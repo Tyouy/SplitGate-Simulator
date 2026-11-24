@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),p=require('./profile-data.js');
+assert.deepEqual(p.parseVoltages('50, 0; 10 10，-20；1e2'),[-20,0,10,50,100]);
+for(const input of ['','0','10, 10','0, Infinity','0, nope'])assert.throws(()=>p.parseVoltages(input));
+const a={params:{L:2000,D:40,Vg:0},profile:[{x:0,phi:0,mu:0,eta:-1,n:0,p:0,total:0},{x:1000,phi:.2,mu:.2,eta:-.8,n:1e12,p:0,total:1e12}]};
+const b={params:{L:2000,D:40,Vg:50},profile:[{x:0,phi:.4,mu:.4,eta:-.6,n:0,p:0,total:0},{x:1000,phi:1.1,mu:1.1,eta:.1,n:2e12,p:0,total:2e12}]};
+const series=p.series([b,a],'mu');assert.equal(series.length,2);assert.equal(series[0].label,'Vg = 0 V');
+assert.deepEqual(series[0].data.map(d=>d.x),[-1,0,1]);assert.equal(series[1].data[1].y,.4);
+assert.equal(p.series([b],'eta')[0].data[1].y,-.6);assert.equal(p.series([b],'density')[0].data[0].y,2);
+assert.equal(a.profile.length,2);assert.equal(a.profile[1].x,1000);
+const rows=p.profileCSV([b,a]).trim().replace(/^\uFEFF/,'').split('\r\n');
+assert.equal(rows[0].split(',')[0],'Vg_V');assert.equal(rows.length,7);
+assert.deepEqual(rows.slice(1).map(s=>Number(s.split(',')[0])),[0,0,0,50,50,50]);
+assert.equal(rows[5].split(',')[3],'0.4');
+console.log('PASS: voltage parsing, separate series, symmetric profiles, energy/density transforms and multi-bias CSV.');
